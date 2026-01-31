@@ -179,10 +179,10 @@ print(sql_script)
 
 ## 🤖 Autor
 
-**Carlos Iglesias Vera**
+**Cristian Iglesias Vera**
 - GitHub: [ciglesiasvera](https://github.com/ciglesiasvera)
 - Email: ciglesiasvera@gmail.com
-- Plataforma: TalentOps (Kranio Beca)
+- Plataforma: TalentOps (Beca Kranio)
 
 ## 📝 Notas de Implementación
 
