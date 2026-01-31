@@ -21,14 +21,15 @@ print('✅ Compatibilidad de esquemas verificada')
 
 # Paso 2: Crear nueva versión (green)
 echo "🏗️  Creando entorno green..."
-# En un entorno real, aquí se aplicaría la configuración de Kubernetes
-# kubectl apply -f k8s/green-environment.yml
-echo "Simulado: kubectl apply -f k8s/green-environment.yml"
+kubectl apply -f k8s/green-environment.yml
 
 # Paso 3: Esperar health checks
 echo "🏥 Esperando health checks..."
-# kubectl wait --for=condition=ready pod -l app=airflow-green --timeout=300s
-echo "Simulado: kubectl wait --for=condition=ready pod -l app=airflow-green --timeout=300s"
+kubectl wait --for=condition=ready pod -l app=airflow,version=green --timeout=300s
+
+# Verificar health checks específicos
+echo "📊 Verificando health checks de Redis..."
+kubectl wait --for=condition=ready pod -l app=airflow-redis --timeout=60s
 
 # Paso 4: Ejecutar smoke tests
 echo "🧪 Ejecutando smoke tests..."
@@ -39,18 +40,27 @@ print('✅ Smoke tests pasaron')
 
 # Paso 5: Cambiar traffic (blue-green switch)
 echo "🔄 Cambiando traffic a green..."
-# kubectl patch service airflow-service -p '{\"spec\":{\"selector\":{\"version\":\"green\"}}}'
-echo "Simulado: kubectl patch service airflow-service"
+kubectl patch service airflow-service -p '{\"spec\":{\"selector\":{\"version\":\"green\"}}}'
 
 # Paso 6: Verificar funcionamiento
 echo "✅ Verificando funcionamiento post-deployment..."
-sleep 2
-# curl -f http://airflow-service/health || exit 1
-echo "Simulado: curl -f http://airflow-service/health"
+sleep 10
+kubectl get pods -l app=airflow,version=green
+echo "🔍 Verificando health endpoint..."
+kubectl run -i --rm --restart=Never test-curl --image=curlimages/curl -- \
+  curl -f http://airflow-service/health || (echo "❌ Health check falló"; exit 1)
 
 # Paso 7: Limpiar versión antigua
 echo "🧹 Limpiando versión antigua..."
-# kubectl delete -f k8s/blue-environment.yml
-echo "Simulado: kubectl delete -f k8s/blue-environment.yml"
+kubectl delete -f k8s/blue-environment.yml
 
 echo "🎉 Deployment completado exitosamente!"
+
+# Resumen final
+echo ""
+echo "📈 Resumen del deployment:"
+echo "   - Nueva versión: $NEW_VERSION"
+echo "   - Entorno green desplegado y verificado"
+echo "   - Health checks exitosos"
+echo "   - Tráfico redirigido a green"
+echo "   - Entorno blue eliminado"

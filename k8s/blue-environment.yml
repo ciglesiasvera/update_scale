@@ -1,0 +1,182 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: airflow-blue
+  labels:
+    app: airflow
+    version: blue
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: airflow
+      version: blue
+  template:
+    metadata:
+      labels:
+        app: airflow
+        version: blue
+    spec:
+      containers:
+      - name: airflow-webserver
+        image: apache/airflow:2.7.0
+        ports:
+        - containerPort: 8080
+        env:
+        - name: AIRFLOW__CORE__EXECUTOR
+          value: "CeleryExecutor"
+        - name: AIRFLOW__CELERY__BROKER_URL
+          value: "redis://airflow-redis:6379/0"
+        - name: AIRFLOW__CELERY__RESULT_BACKEND
+          value: "redis://airflow-redis:6379/0"
+        - name: AIRFLOW__WEBSERVER__SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: airflow-secrets
+              key: webserver-secret-key
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 15
+          timeoutSeconds: 5
+          failureThreshold: 3
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+      - name: airflow-worker
+        image: apache/airflow:2.7.0
+        command: ["celery", "worker"]
+        env:
+        - name: AIRFLOW__CORE__EXECUTOR
+          value: "CeleryExecutor"
+        - name: AIRFLOW__CELERY__BROKER_URL
+          value: "redis://airflow-redis:6379/0"
+        - name: AIRFLOW__CELERY__RESULT_BACKEND
+          value: "redis://airflow-redis:6379/0"
+        - name: AIRFLOW__WEBSERVER__SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: airflow-secrets
+              key: webserver-secret-key
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - celery -A airflow.executors.celery_executor inspect ping -d celery@$HOSTNAME
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        livenessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - celery -A airflow.executors.celery_executor inspect ping -d celery@$HOSTNAME
+          initialDelaySeconds: 60
+          periodSeconds: 15
+          timeoutSeconds: 5
+          failureThreshold: 3
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: airflow-blue-service
+  labels:
+    app: airflow
+    version: blue
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8080
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  selector:
+    app: airflow
+    version: blue
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: airflow-redis
+  labels:
+    app: airflow-redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: airflow-redis
+  template:
+    metadata:
+      labels:
+        app: airflow-redis
+    spec:
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        ports:
+        - containerPort: 6379
+        readinessProbe:
+          exec:
+            command:
+            - redis-cli
+            - ping
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        livenessProbe:
+          exec:
+            command:
+            - redis-cli
+            - ping
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "200m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: airflow-redis
+  labels:
+    app: airflow-redis
+spec:
+  type: ClusterIP
+  ports:
+  - port: 6379
+    targetPort: 6379
+    protocol: TCP
+    name: redis
+  selector:
+    app: airflow-redis
